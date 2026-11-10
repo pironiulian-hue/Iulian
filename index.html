@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transcriere Ședințe</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #6b7385;
+  --border: #e2e5eb; --accent: #2f6fed; --accent-soft: #e8f0fe;
+  --danger: #d93a3a; --ok: #1f9d55; --warn: #c47f00;
+  --decision: #e7f6ec; --action: #fff4dc;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171d; --panel: #1c2028; --text: #e6e9ef; --muted: #9aa2b1;
+    --border: #2c323d; --accent: #5b8cff; --accent-soft: #24304a;
+    --decision: #1d3326; --action: #3a3020;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
+header h1 { font-size: 18px; margin: 0; flex: 1; min-width: 160px; }
+.timer { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 18px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); display: inline-block; margin-right: 6px; }
+.dot.live { background: var(--danger); animation: pulse 1.2s infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+main { display: grid; grid-template-columns: 300px 1fr; gap: 16px; padding: 16px; max-width: 1400px; margin: 0 auto; }
+@media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+.panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 10px; }
+aside { display: flex; flex-direction: column; gap: 16px; }
+label { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 4px; }
+input, select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+textarea { resize: vertical; min-height: 90px; }
+button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+button.small { padding: 3px 8px; font-size: 12px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.row input { flex: 1; width: auto; min-width: 0; }
+.speakers { display: flex; flex-wrap: wrap; gap: 6px; }
+.speaker-btn { padding: 5px 10px; border-radius: 16px; font-size: 13px; }
+.speaker-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.speaker-btn kbd { font-size: 10px; opacity: .7; margin-left: 4px; }
+.transcript { min-height: 50vh; max-height: calc(100vh - 260px); overflow-y: auto; }
+.seg { display: grid; grid-template-columns: 64px 1fr auto; gap: 10px; padding: 8px; border-radius: 6px; border-left: 3px solid transparent; }
+.seg:hover { background: var(--bg); }
+.seg.decision { background: var(--decision); border-left-color: var(--ok); }
+.seg.action { background: var(--action); border-left-color: var(--warn); }
+.seg .t { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 2px; }
+.seg .who { font-weight: 600; font-size: 13px; color: var(--accent); cursor: pointer; }
+.seg .txt { outline: none; white-space: pre-wrap; }
+.seg .txt:focus { background: var(--accent-soft); border-radius: 4px; }
+.seg .tools { display: flex; gap: 4px; opacity: 0; transition: opacity .15s; align-items: flex-start; }
+.seg:hover .tools, .seg:focus-within .tools { opacity: 1; }
+.seg mark { background: #ffe066; color: #000; }
+.interim { color: var(--muted); font-style: italic; padding: 8px 8px 8px 82px; min-height: 36px; }
+.empty { color: var(--muted); text-align: center; padding: 40px 10px; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.toolbar input { flex: 1; min-width: 160px; }
+.history-item { display: flex; justify-content: space-between; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.history-item:last-child { border-bottom: 0; }
+.history-item a { color: var(--accent); cursor: pointer; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.warnbox { background: var(--action); border: 1px solid var(--warn); padding: 10px 14px; border-radius: 8px; margin: 16px; display: none; }
+.stats { font-size: 12px; color: var(--muted); }
+dialog { border: 1px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--text); max-width: 760px; width: 95%; }
+dialog pre { white-space: pre-wrap; background: var(--bg); padding: 12px; border-radius: 6px; max-height: 60vh; overflow: auto; font-size: 13px; }
+.hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎙️ Transcriere Ședințe</h1>
+  <span><span id="dot" class="dot"></span><span id="status">Oprit</span></span>
+  <span class="timer" id="timer">00:00:00</span>
+  <button id="btnStart" class="primary">▶ Începe</button>
+  <button id="btnPause" disabled>⏸ Pauză</button>
+  <button id="btnStop" class="danger" disabled>⏹ Încheie</button>
+</header>
+
+<div class="warnbox" id="warn">
+  ⚠️ Browserul tău nu suportă recunoașterea vocală. Folosește <b>Google Chrome</b> sau <b>Microsoft Edge</b> (desktop sau Android).
+  Poți totuși să scrii manual transcrierea și să o exporți.
+</div>
+
+<main>
+  <aside>
+    <section class="panel">
+      <h2>Ședința</h2>
+      <label for="title">Titlu</label>
+      <input id="title" placeholder="ex. Ședință săptămânală echipă">
+      <label for="lang">Limba vorbită</label>
+      <select id="lang">
+        <option value="ro-RO" selected>Română</option>
+        <option value="en-US">English (US)</option>
+        <option value="en-GB">English (UK)</option>
+        <option value="fr-FR">Français</option>
+        <option value="de-DE">Deutsch</option>
+        <option value="it-IT">Italiano</option>
+        <option value="es-ES">Español</option>
+        <option value="hu-HU">Magyar</option>
+      </select>
+      <label><input type="checkbox" id="recordAudio" style="width:auto" checked> Înregistrează și audio (descărcabil)</label>
+    </section>
+
+    <section class="panel">
+      <h2>Participanți</h2>
+      <div class="row">
+        <input id="newSpeaker" placeholder="Nume participant">
+        <button id="btnAddSpeaker">+</button>
+      </div>
+      <div class="hint">Selectează cine vorbește acum. Scurtături: tastele 1–9 (când nu scrii într-un câmp).</div>
+      <div class="speakers" id="speakers" style="margin-top:10px"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Notițe</h2>
+      <textarea id="notes" placeholder="Notițe libere despre ședință..."></textarea>
+    </section>
+
+    <section class="panel">
+      <h2>Istoric ședințe</h2>
+      <div id="history"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="small" id="btnNew">+ Ședință nouă</button>
+      </div>
+    </section>
+  </aside>
+
+  <section class="panel">
+    <div class="toolbar">
+      <input id="search" placeholder="🔍 Caută în transcriere...">
+      <button id="btnManual" title="Adaugă un rând scris manual">✎ Rând manual</button>
+      <button id="btnMinutes">📋 Minută</button>
+      <select id="exportFmt" style="width:auto">
+        <option value="txt">Export .txt</option>
+        <option value="md">Export .md</option>
+        <option value="doc">Export Word (.doc)</option>
+        <option value="srt">Export subtitrare .srt</option>
+        <option value="json">Export .json</option>
+      </select>
+      <button id="btnExport">⬇ Descarcă</button>
+      <button id="btnCopy">⧉ Copiază</button>
+      <button id="btnAudio" disabled>🔊 Audio</button>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div class="transcript" id="transcript"></div>
+    <div class="interim" id="interim"></div>
+  </section>
+</main>
+
+<dialog id="minutesDlg">
+  <h3 style="margin-top:0">Minuta ședinței</h3>
+  <pre id="minutesText"></pre>
+  <div class="row" style="justify-content:flex-end">
+    <button id="btnMinCopy">⧉ Copiază</button>
+    <button id="btnMinDl">⬇ Descarcă</button>
+    <button id="btnMinClose" class="primary">Închide</button>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const STORE = 'meetingTranscriber.v1';
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  // ---------- Stare ----------
+  let meeting = newMeeting();
+  let state = 'idle';          // idle | running | paused
+  let recognition = null;
+  let elapsedBefore = 0;       // ms acumulate înainte de ultima pornire
+  let startedAt = 0;           // timestamp pornire curentă
+  let tick = null;
+  let mediaRecorder = null, audioChunks = [], audioUrl = null, audioStream = null;
+
+  function newMeeting() {
+    return {
+      id: 'm' + Date.now(),
+      title: '',
+      date: new Date().toISOString(),
+      lang: 'ro-RO',
+      speakers: ['Vorbitor 1', 'Vorbitor 2'],
+      current: 0,
+      segments: [],   // {t: ms, speaker, text, tag: ''|'decision'|'action'}
+      notes: '',
+      duration: 0
+    };
+  }
+
+  // ---------- Persistență ----------
+  function loadAll() {
+    try { return JSON.parse(localStorage.getItem(STORE)) || {}; } catch { return {}; }
+  }
+  function saveAll(all) {
+    try { localStorage.setItem(STORE, JSON.stringify(all)); } catch (e) { console.warn(e); }
+  }
+  function save() {
+    meeting.duration = elapsed();
+    if (!meeting.segments.length && !meeting.notes && !meeting.title) return;
+    const all = loadAll();
+    all[meeting.id] = meeting;
+    saveAll(all);
+    renderHistory();
+  }
+  let saveTimer = null;
+  const saveSoon = () => { clearTimeout(saveTimer); saveTimer = setTimeout(save, 500); };
+
+  // ---------- Timp ----------
+  function elapsed() {
+    return elapsedBefore + (state === 'running' ? Date.now() - startedAt : 0);
+  }
+  function fmt(ms) {
+    const s = Math.floor(ms / 1000);
+    const h = String(Math.floor(s / 3600)).padStart(2, '0');
+    const m = String(Math.floor(s % 3600 / 60)).padStart(2, '0');
+    return `${h}:${m}:${String(s % 60).padStart(2, '0')}`;
+  }
+  function fmtSrt(ms) {
+    return fmt(ms) + ',' + String(Math.floor(ms % 1000)).padStart(3, '0');
+  }
+  const updateTimer = () => { $('timer').textContent = fmt(elapsed()); };
+
+  // ---------- Recunoaștere vocală ----------
+  let segStart = null;
+  function buildRecognition() {
+    const r = new SR();
+    r.lang = meeting.lang;
+    r.continuous = true;
+    r.interimResults = true;
+    r.maxAlternatives = 1;
+    r.onresult = (e) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const res = e.results[i];
+        const text = res[0].transcript.trim();
+        if (segStart === null) segStart = elapsed();
+        if (res.isFinal) {
+          if (text) addSegment(text, segStart);
+          segStart = null;
+        } else {
+          interim += text + ' ';
+        }
+      }
+      $('interim').textContent = interim ? `${meeting.speakers[meeting.current] || ''}: ${interim}` : '';
+    };
+    r.onerror = (e) => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        alert('Accesul la microfon a fost refuzat. Permite microfonul din bara de adrese a browserului.');
+        stop();
+      } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
+        setStatus('Eroare: ' + e.error + ' (reîncerc...)');
+      }
+    };
+    // Chrome oprește recunoașterea după pauze lungi — o repornim automat.
+    r.onend = () => {
+      if (state === 'running') {
+        try { r.start(); } catch { setTimeout(() => state === 'running' && safeStart(), 300); }
+      }
+    };
+    return r;
+  }
+  function safeStart() {
+    try { recognition = buildRecognition(); recognition.start(); } catch (e) { console.warn(e); }
+  }
+
+  async function startAudio() {
+    if (!$('recordAudio').checked || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) return;
+    try {
+      if (!audioStream) audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!mediaRecorder) {
+        audioChunks = [];
+        mediaRecorder = new MediaRecorder(audioStream);
+        mediaRecorder.ondataavailable = (e) => e.data.size && audioChunks.push(e.data);
+        mediaRecorder.onstop = () => {
+          if (audioUrl) URL.revokeObjectURL(audioUrl);
+          audioUrl = URL.createObjectURL(new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' }));
+          $('btnAudio').disabled = false;
+        };
+        mediaRecorder.start(1000);
+      } else if (mediaRecorder.state === 'paused') {
+        mediaRecorder.resume();
+      }
+    } catch (e) { console.warn('Audio indisponibil', e); }
+  }
+
+  async function start() {
+    if (state === 'running') return;
+    meeting.lang = $('lang').value;
+    if (!meeting.title) { meeting.title = $('title').value || 'Ședință ' + new Date().toLocaleString('ro-RO'); $('title').value = meeting.title; }
+    state = 'running';
+    startedAt = Date.now();
+    await startAudio();
+    if (SR) safeStart();
+    tick = setInterval(updateTimer, 500);
+    setStatus(SR ? 'Ascult...' : 'Cronometru pornit (fără recunoaștere vocală)', true);
+    syncButtons();
+  }
+  function pause() {
+    if (state !== 'running') return;
+    elapsedBefore = elapsed();
+    state = 'paused';
+    recognition?.stop();
+    if (mediaRecorder?.state === 'recording') mediaRecorder.pause();
+    clearInterval(tick); updateTimer();
+    setStatus('Pauză');
+    $('interim').textContent = '';
+    syncButtons(); save();
+  }
+  function stop() {
+    if (state === 'running') elapsedBefore = elapsed();
+    state = 'idle';
+    recognition?.stop(); recognition = null;
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    mediaRecorder = null;
+    audioStream?.getTracks().forEach(t => t.stop()); audioStream = null;
+    clearInterval(tick); updateTimer();
+    setStatus('Încheiat');
+    $('interim').textContent = '';
+    syncButtons(); save();
+  }
+  function setStatus(text, live = false) {
+    $('status').textContent = text;
+    $('dot').classList.toggle('live', live);
+  }
+  function syncButtons() {
+    $('btnStart').disabled = state === 'running';
+    $('btnStart').textContent = state === 'paused' ? '▶ Continuă' : '▶ Începe';
+    $('btnPause').disabled = state !== 'running';
+    $('btnStop').disabled = state === 'idle';
+    $('lang').disabled = state !== 'idle';
+  }
+
+  // ---------- Segmente ----------
+  function addSegment(text, t = elapsed()) {
+    text = text.charAt(0).toUpperCase() + text.slice(1);
+    const speaker = meeting.speakers[meeting.current] || '';
+    const last = meeting.segments[meeting.segments.length - 1];
+    // Lipim fraze scurte consecutive ale aceluiași vorbitor, la mai puțin de 4 s.
+    if (last && last.speaker === speaker && !last.tag && t - last.end < 4000 && last.text.length < 400) {
+      last.text += ' ' + text;
+      last.end = elapsed();
+    } else {
+      meeting.segments.push({ t, end: elapsed(), speaker, text, tag: '' });
+    }
+    renderTranscript(true);
+    saveSoon();
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function renderTranscript(scroll = false) {
+    const box = $('transcript');
+    const q = $('search').value.trim().toLowerCase();
+    const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+    box.innerHTML = '';
+    const segs = meeting.segments.map((s, i) => [s, i]).filter(([s]) =>
+      !q || s.text.toLowerCase().includes(q) || s.speaker.toLowerCase().includes(q));
+    if (!segs.length) {
+      box.innerHTML = `<div class="empty">${q ? 'Niciun rezultat.' : 'Apasă <b>▶ Începe</b> și vorbește. Transcrierea apare aici.<br>Poți edita orice rând dând click pe text.'}</div>`;
+    }
+    for (const [s, i] of segs) {
+      const el = document.createElement('div');
+      el.className = 'seg' + (s.tag ? ' ' + s.tag : '');
+      let html = escapeHtml(s.text);
+      if (q) html = html.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), m => `<mark>${m}</mark>`);
+      el.innerHTML = `
+        <div class="t">${fmt(s.t)}</div>
+        <div>
+          <div class="who" title="Click pentru a schimba vorbitorul">${escapeHtml(s.speaker || '—')}${s.tag === 'decision' ? ' · ✅ Decizie' : s.tag === 'action' ? ' · 📌 Acțiune' : ''}</div>
+          <div class="txt" contenteditable="true" spellcheck="true">${html}</div>
+        </div>
+        <div class="tools">
+          <button class="small" data-a="decision" title="Marchează ca decizie">✅</button>
+          <button class="small" data-a="action" title="Marchează ca acțiune de făcut">📌</button>
+          <button class="small" data-a="del" title="Șterge">🗑</button>
+        </div>`;
+      el.querySelector('.txt').addEventListener('blur', (e) => {
+        const v = e.target.innerText.trim();
+        if (v !== s.text) { s.text = v; saveSoon(); }
+      });
+      el.querySelector('.who').addEventListener('click', () => {
+        const idx = meeting.speakers.indexOf(s.speaker);
+        s.speaker = meeting.speakers[(idx + 1) % meeting.speakers.length] || s.speaker;
+        renderTranscript(); saveSoon();
+      });
+      el.querySelectorAll('.tools button').forEach(b => b.addEventListener('click', () => {
+        const a = b.dataset.a;
+        if (a === 'del') { if (confirm('Ștergi acest rând?')) meeting.segments.splice(i, 1); }
+        else s.tag = s.tag === a ? '' : a;
+        renderTranscript(); saveSoon();
+      }));
+      box.appendChild(el);
+    }
+    if (scroll && atBottom) box.scrollTop = box.scrollHeight;
+    renderStats();
+  }
+
+  function renderStats() {
+    const words = meeting.segments.reduce((n, s) => n + s.text.split(/\s+/).filter(Boolean).length, 0);
+    const per = {};
+    meeting.segments.forEach(s => { per[s.speaker] = (per[s.speaker] || 0) + s.text.split(/\s+/).filter(Boolean).length; });
+    const share = Object.entries(per).map(([k, v]) => `${k}: ${words ? Math.round(v / words * 100) : 0}%`).join(' · ');
+    const dec = meeting.segments.filter(s => s.tag === 'decision').length;
+    const act = meeting.segments.filter(s => s.tag === 'action').length;
+    $('stats').textContent = meeting.segments.length
+      ? `${meeting.segments.length} rânduri · ${words} cuvinte · ${dec} decizii · ${act} acțiuni${share ? ' · ' + share : ''}`
+      : '';
+  }
+
+  // ---------- Vorbitori ----------
+  function renderSpeakers() {
+    const box = $('speakers');
+    box.innerHTML = '';
+    meeting.speakers.forEach((name, i) => {
+      const b = document.createElement('button');
+      b.className = 'speaker-btn' + (i === meeting.current ? ' active' : '');
+      b.innerHTML = `${escapeHtml(name)}${i < 9 ? `<kbd>${i + 1}</kbd>` : ''}`;
+      b.title = 'Click: vorbește acum · Dublu-click: redenumește · Click dreapta: șterge';
+      b.onclick = () => setSpeaker(i);
+      b.ondblclick = () => {
+        const n = prompt('Nume nou:', name);
+        if (n && n.trim()) {
+          meeting.segments.forEach(s => { if (s.speaker === name) s.speaker = n.trim(); });
+          meeting.speakers[i] = n.trim();
+          renderSpeakers(); renderTranscript(); saveSoon();
+        }
+      };
+      b.oncontextmenu = (e) => {
+        e.preventDefault();
+        if (meeting.speakers.length > 1 && confirm(`Elimini participantul „${name}”? (rândurile rămân)`)) {
+          meeting.speakers.splice(i, 1);
+          meeting.current = Math.min(meeting.current, meeting.speakers.length - 1);
+          renderSpeakers(); saveSoon();
+        }
+      };
+      box.appendChild(b);
+    });
+  }
+  function setSpeaker(i) {
+    if (i < 0 || i >= meeting.speakers.length) return;
+    meeting.current = i;
+    segStart = null;
+    renderSpeakers();
+  }
+  function addSpeaker() {
+    const n = $('newSpeaker').value.trim();
+    if (!n) return;
+    meeting.speakers.push(n);
+    $('newSpeaker').value = '';
+    meeting.current = meeting.speakers.length - 1;
+    renderSpeakers(); saveSoon();
+  }
+
+  // ---------- Istoric ----------
+  function renderHistory() {
+    const all = Object.values(loadAll()).sort((a, b) => b.date.localeCompare(a.date));
+    const box = $('history');
+    if (!all.length) { box.innerHTML = '<div class="hint">Nicio ședință salvată încă.</div>'; return; }
+    box.innerHTML = '';
+    all.slice(0, 30).forEach(m => {
+      const row = document.createElement('div');
+      row.className = 'history-item';
+      const a = document.createElement('a');
+      a.textContent = (m.id === meeting.id ? '● ' : '') + (m.title || 'Fără titlu');
+      a.title = new Date(m.date).toLocaleString('ro-RO');
+      a.onclick = () => openMeeting(m.id);
+      const right = document.createElement('span');
+      right.className = 'row';
+      right.innerHTML = `<span class="hint" style="margin:0">${new Date(m.date).toLocaleDateString('ro-RO')}</span>`;
+      const del = document.createElement('button');
+      del.className = 'small'; del.textContent = '🗑'; del.title = 'Șterge ședința';
+      del.onclick = () => {
+        if (!confirm(`Ștergi definitiv „${m.title}”?`)) return;
+        const all2 = loadAll(); delete all2[m.id]; saveAll(all2);
+        if (m.id === meeting.id) resetTo(newMeeting()); else renderHistory();
+      };
+      right.appendChild(del);
+      row.append(a, right);
+      box.appendChild(row);
+    });
+  }
+  function openMeeting(id) {
+    if (state !== 'idle') { alert('Încheie mai întâi ședința curentă.'); return; }
+    save();
+    const m = loadAll()[id];
+    if (m) resetTo(m);
+  }
+  function resetTo(m) {
+    meeting = m;
+    meeting.speakers ||= ['Vorbitor 1'];
+    elapsedBefore = m.duration || 0;
+    $('title').value = m.title || '';
+    $('lang').value = m.lang || 'ro-RO';
+    $('notes').value = m.notes || '';
+    $('search').value = '';
+    if (audioUrl) { URL.revokeObjectURL(audioUrl); audioUrl = null; }
+    $('btnAudio').disabled = true;
+    updateTimer(); setStatus(m.segments.length ? 'Ședință salvată' : 'Oprit');
+    renderSpeakers(); renderTranscript(); renderHistory(); syncButtons();
+  }
+
+  // ---------- Export ----------
+  const dateStr = () => new Date(meeting.date).toLocaleString('ro-RO');
+  const lineOf = (s) => `[${fmt(s.t)}] ${s.speaker ? s.speaker + ': ' : ''}${s.tag === 'decision' ? '[DECIZIE] ' : s.tag === 'action' ? '[ACȚIUNE] ' : ''}${s.text}`;
+
+  function asText() {
+    return [
+      meeting.title || 'Ședință',
+      `Data: ${dateStr()}`,
+      `Durată: ${fmt(elapsed())}`,
+      `Participanți: ${meeting.speakers.join(', ')}`,
+      '', 'TRANSCRIERE', '-----------',
+      ...meeting.segments.map(lineOf),
+      ...(meeting.notes ? ['', 'NOTIȚE', '------', meeting.notes] : [])
+    ].join('\n');
+  }
+  function asMarkdown() {
+    return [
+      `# ${meeting.title || 'Ședință'}`, '',
+      `- **Data:** ${dateStr()}`, `- **Durată:** ${fmt(elapsed())}`, `- **Participanți:** ${meeting.speakers.join(', ')}`, '',
+      '## Transcriere', '',
+      ...meeting.segments.map(s => `**[${fmt(s.t)}] ${s.speaker}:** ${s.tag === 'decision' ? '✅ ' : s.tag === 'action' ? '📌 ' : ''}${s.text}  `),
+      ...(meeting.notes ? ['', '## Notițe', '', meeting.notes] : [])
+    ].join('\n');
+  }
+  function asSrt() {
+    return meeting.segments.map((s, i) => {
+      const end = Math.max(s.end || 0, s.t + 2000);
+      return `${i + 1}\n${fmtSrt(s.t)} --> ${fmtSrt(end)}\n${s.speaker ? s.speaker + ': ' : ''}${s.text}\n`;
+    }).join('\n');
+  }
+  function asDoc() {
+    const rows = meeting.segments.map(s =>
+      `<p><span style="color:#888">[${fmt(s.t)}]</span> <b>${escapeHtml(s.speaker)}:</b> ${s.tag === 'decision' ? '<b style="color:#1f9d55">[DECIZIE]</b> ' : s.tag === 'action' ? '<b style="color:#c47f00">[ACȚIUNE]</b> ' : ''}${escapeHtml(s.text)}</p>`).join('');
+    return `<html><head><meta charset="utf-8"></head><body style="font-family:Calibri,Arial">
+      <h1>${escapeHtml(meeting.title || 'Ședință')}</h1>
+      <p><b>Data:</b> ${dateStr()}<br><b>Durată:</b> ${fmt(elapsed())}<br><b>Participanți:</b> ${escapeHtml(meeting.speakers.join(', '))}</p>
+      <pre style="font-family:Calibri,Arial">${escapeHtml(minutesText())}</pre>
+      <h2>Transcriere completă</h2>${rows}
+      ${meeting.notes ? `<h2>Notițe</h2><p>${escapeHtml(meeting.notes).replace(/\n/g, '<br>')}</p>` : ''}
+      </body></html>`;
+  }
+  function minutesText() {
+    const dec = meeting.segments.filter(s => s.tag === 'decision');
+    const act = meeting.segments.filter(s => s.tag === 'action');
+    const per = {};
+    meeting.segments.forEach(s => { per[s.speaker] = (per[s.speaker] || 0) + 1; });
+    return [
+      `MINUTA: ${meeting.title || 'Ședință'}`,
+      `Data: ${dateStr()}  |  Durată: ${fmt(elapsed())}`,
+      `Participanți: ${meeting.speakers.join(', ')}`,
+      '',
+      'DECIZII:',
+      ...(dec.length ? dec.map((s, i) => `  ${i + 1}. ${s.text}  (${s.speaker}, ${fmt(s.t)})`) : ['  — niciuna marcată (folosește ✅ pe un rând)']),
+      '',
+      'ACȚIUNI DE FĂCUT:',
+      ...(act.length ? act.map((s, i) => `  ${i + 1}. ${s.text}  — propus de ${s.speaker} (${fmt(s.t)})`) : ['  — niciuna marcată (folosește 📌 pe un rând)']),
+      '',
+      'INTERVENȚII PE PARTICIPANT:',
+      ...Object.entries(per).map(([k, v]) => `  ${k}: ${v}`),
+      ...(meeting.notes ? ['', 'NOTIȚE:', meeting.notes] : [])
+    ].join('\n');
+  }
+  function download(name, content, type) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(content instanceof Blob ? content : new Blob([content], { type }));
+    a.download = name;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+  }
+  const fileBase = () => (meeting.title || 'sedinta').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9\- ]/g, '').trim().replace(/\s+/g, '_') || 'sedinta';
+
+  function doExport() {
+    const f = $('exportFmt').value;
+    const b = fileBase();
+    if (f === 'txt') download(b + '.txt', asText(), 'text/plain;charset=utf-8');
+    if (f === 'md') download(b + '.md', asMarkdown(), 'text/markdown;charset=utf-8');
+    if (f === 'srt') download(b + '.srt', asSrt(), 'text/plain;charset=utf-8');
+    if (f === 'doc') download(b + '.doc', '﻿' + asDoc(), 'application/msword');
+    if (f === 'json') download(b + '.json', JSON.stringify(meeting, null, 2), 'application/json');
+  }
+  async function copy(text) {
+    try { await navigator.clipboard.writeText(text); flash('Copiat în clipboard ✓'); }
+    catch { prompt('Copiază manual:', text); }
+  }
+  function flash(msg) {
+    const old = $('status').textContent;
+    $('status').textContent = msg;
+    setTimeout(() => { if ($('status').textContent === msg) $('status').textContent = old; }, 1500);
+  }
+
+  // ---------- Evenimente ----------
+  $('btnStart').onclick = start;
+  $('btnPause').onclick = pause;
+  $('btnStop').onclick = () => { if (confirm('Închei ședința?')) stop(); };
+  $('btnAddSpeaker').onclick = addSpeaker;
+  $('newSpeaker').onkeydown = (e) => { if (e.key === 'Enter') addSpeaker(); };
+  $('title').oninput = (e) => { meeting.title = e.target.value; saveSoon(); };
+  $('notes').oninput = (e) => { meeting.notes = e.target.value; saveSoon(); };
+  $('search').oninput = () => renderTranscript();
+  $('btnExport').onclick = doExport;
+  $('btnCopy').onclick = () => copy(asText());
+  $('btnAudio').onclick = () => audioUrl && fetch(audioUrl).then(r => r.blob()).then(bl =>
+    download(fileBase() + (bl.type.includes('ogg') ? '.ogg' : bl.type.includes('mp4') ? '.m4a' : '.webm'), bl));
+  $('btnManual').onclick = () => {
+    const t = prompt(`Text pentru ${meeting.speakers[meeting.current]}:`);
+    if (t && t.trim()) addSegment(t.trim());
+  };
+  $('btnMinutes').onclick = () => { $('minutesText').textContent = minutesText(); $('minutesDlg').showModal(); };
+  $('btnMinClose').onclick = () => $('minutesDlg').close();
+  $('btnMinCopy').onclick = () => copy(minutesText());
+  $('btnMinDl').onclick = () => download(fileBase() + '_minuta.txt', minutesText(), 'text/plain;charset=utf-8');
+  $('btnNew').onclick = () => {
+    if (state !== 'idle') { alert('Încheie mai întâi ședința curentă.'); return; }
+    save(); resetTo(newMeeting());
+  };
+
+  document.addEventListener('keydown', (e) => {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+    if (/^[1-9]$/.test(e.key)) setSpeaker(+e.key - 1);
+    if (e.key === ' ' && !e.ctrlKey) { e.preventDefault(); state === 'running' ? pause() : start(); }
+  });
+  window.addEventListener('beforeunload', (e) => {
+    save();
+    if (state !== 'idle') { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  // ---------- Init ----------
+  if (!SR) $('warn').style.display = 'block';
+  renderSpeakers(); renderTranscript(); renderHistory(); syncButtons();
+})();
+</script>
+</body>
+</html>
