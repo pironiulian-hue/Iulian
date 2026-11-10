@@ -2,8 +2,17 @@
 <html lang="ro">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Transcriere Ședințe</title>
+<meta name="description" content="Transcriere live a ședințelor, cu vorbitori, decizii, acțiuni și minută.">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Ședințe">
+<meta name="theme-color" content="#2f6fed">
 <style>
 :root {
   --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #6b7385;
@@ -27,7 +36,10 @@ header h1 { font-size: 18px; margin: 0; flex: 1; min-width: 160px; }
 .dot.live { background: var(--danger); animation: pulse 1.2s infinite; }
 @keyframes pulse { 50% { opacity: .3; } }
 main { display: grid; grid-template-columns: 300px 1fr; gap: 16px; padding: 16px; max-width: 1400px; margin: 0 auto; }
-@media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+@media (max-width: 860px) {
+  main { grid-template-columns: 1fr; }
+  main > section.panel { order: -1; }
+}
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
 .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 10px; }
 aside { display: flex; flex-direction: column; gap: 16px; }
@@ -70,6 +82,24 @@ button.small { padding: 3px 8px; font-size: 12px; }
 dialog { border: 1px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--text); max-width: 760px; width: 95%; }
 dialog pre { white-space: pre-wrap; background: var(--bg); padding: 12px; border-radius: 6px; max-height: 60vh; overflow: auto; font-size: 13px; }
 .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+/* Telefon: butoanele principale jos, la îndemâna degetului */
+@media (max-width: 600px) {
+  header { padding: calc(10px + env(safe-area-inset-top)) 14px 10px; gap: 8px; }
+  header h1 { font-size: 16px; min-width: 0; }
+  .controls { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid var(--border); }
+  .controls button { padding: 14px 8px; font-size: 16px; }
+  main { padding: 10px 10px calc(90px + env(safe-area-inset-bottom)); gap: 10px; }
+  .transcript { max-height: 55vh; min-height: 35vh; }
+  .seg { grid-template-columns: 1fr; gap: 2px; }
+  .seg .tools { justify-content: flex-end; }
+  .interim { padding-left: 8px; }
+  .toolbar button, .toolbar select { flex: 1 1 auto; }
+  input, select, textarea { font-size: 16px; } /* evită zoom-ul automat pe iPhone */
+}
+.controls { display: contents; }
+@media (max-width: 600px) { .controls { display: grid; } }
+@media (hover: none) { .seg .tools { opacity: 1; } .seg .tools button { padding: 6px 10px; font-size: 14px; } }
 </style>
 </head>
 <body>
@@ -78,13 +108,15 @@ dialog pre { white-space: pre-wrap; background: var(--bg); padding: 12px; border
   <h1>🎙️ Transcriere Ședințe</h1>
   <span><span id="dot" class="dot"></span><span id="status">Oprit</span></span>
   <span class="timer" id="timer">00:00:00</span>
-  <button id="btnStart" class="primary">▶ Începe</button>
-  <button id="btnPause" disabled>⏸ Pauză</button>
-  <button id="btnStop" class="danger" disabled>⏹ Încheie</button>
+  <div class="controls">
+    <button id="btnStart" class="primary">▶ Începe</button>
+    <button id="btnPause" disabled>⏸ Pauză</button>
+    <button id="btnStop" class="danger" disabled>⏹ Încheie</button>
+  </div>
 </header>
 
 <div class="warnbox" id="warn">
-  ⚠️ Browserul tău nu suportă recunoașterea vocală. Folosește <b>Google Chrome</b> sau <b>Microsoft Edge</b> (desktop sau Android).
+  ⚠️ Browserul tău nu suportă recunoașterea vocală. Folosește <b>Safari</b> pe iPhone/iPad (iOS 14.5+), <b>Google Chrome</b> sau <b>Microsoft Edge</b>.
   Poți totuși să scrii manual transcrierea și să o exporți.
 </div>
 
@@ -106,6 +138,7 @@ dialog pre { white-space: pre-wrap; background: var(--bg); padding: 12px; border
         <option value="hu-HU">Magyar</option>
       </select>
       <label><input type="checkbox" id="recordAudio" style="width:auto" checked> Înregistrează și audio (descărcabil)</label>
+      <div class="hint" id="iosAudioHint" style="display:none">Pe iPhone, înregistrarea audio simultană poate bloca transcrierea, așa că e oprită implicit.</div>
     </section>
 
     <section class="panel">
@@ -114,7 +147,7 @@ dialog pre { white-space: pre-wrap; background: var(--bg); padding: 12px; border
         <input id="newSpeaker" placeholder="Nume participant">
         <button id="btnAddSpeaker">+</button>
       </div>
-      <div class="hint">Selectează cine vorbește acum. Scurtături: tastele 1–9 (când nu scrii într-un câmp).</div>
+      <div class="hint">Atinge numele celui care vorbește. Atinge din nou un nume selectat ca să-l redenumești sau să-l ștergi. Tastatură: 1–9.</div>
       <div class="speakers" id="speakers" style="margin-top:10px"></div>
     </section>
 
@@ -177,6 +210,7 @@ dialog pre { white-space: pre-wrap; background: var(--bg); padding: 12px; border
   let elapsedBefore = 0;       // ms acumulate înainte de ultima pornire
   let startedAt = 0;           // timestamp pornire curentă
   let tick = null;
+  let recActive = false;
   let mediaRecorder = null, audioChunks = [], audioUrl = null, audioStream = null;
 
   function newMeeting() {
@@ -249,16 +283,24 @@ dialog pre { white-space: pre-wrap; background: var(--bg); padding: 12px; border
       }
       $('interim').textContent = interim ? `${meeting.speakers[meeting.current] || ''}: ${interim}` : '';
     };
+    r.onstart = () => { recActive = true; };
     r.onerror = (e) => {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        alert('Accesul la microfon a fost refuzat. Permite microfonul din bara de adrese a browserului.');
+        const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+        alert(standalone
+          ? 'Recunoașterea vocală nu e permisă. Pe iPhone: Configurări → Safari → Microfon → Permite, și Configurări → General → Tastatură → Dictare activată. Dacă tot nu merge, deschide aplicația direct în Safari.'
+          : 'Accesul la microfon sau la recunoașterea vocală a fost refuzat. Permite microfonul din setările browserului (pe iPhone: Configurări → Safari → Microfon) și activează Dictarea.');
         stop();
+      } else if (e.error === 'audio-capture' && mediaRecorder) {
+        setStatus('Microfonul e ocupat de înregistrarea audio — o opresc și continui transcrierea.', true);
+        stopAudio(); $('recordAudio').checked = false;
       } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
         setStatus('Eroare: ' + e.error + ' (reîncerc...)');
       }
     };
     // Chrome oprește recunoașterea după pauze lungi — o repornim automat.
     r.onend = () => {
+      recActive = false;
       if (state === 'running') {
         try { r.start(); } catch { setTimeout(() => state === 'running' && safeStart(), 300); }
       }
@@ -267,6 +309,23 @@ dialog pre { white-space: pre-wrap; background: var(--bg); padding: 12px; border
   }
   function safeStart() {
     try { recognition = buildRecognition(); recognition.start(); } catch (e) { console.warn(e); }
+  }
+
+  function stopAudio() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    mediaRecorder = null;
+    audioStream?.getTracks().forEach(t => t.stop()); audioStream = null;
+  }
+
+  // Ține ecranul aprins în timpul ședinței (altfel iPhone-ul se blochează și transcrierea se oprește).
+  let wakeLock = null;
+  async function keepAwake(on) {
+    try {
+      if (on && 'wakeLock' in navigator && !wakeLock) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+    } catch (e) { console.warn('Wake lock indisponibil', e); }
   }
 
   async function startAudio() {
@@ -298,6 +357,7 @@ dialog pre { white-space: pre-wrap; background: var(--bg); padding: 12px; border
     await startAudio();
     if (SR) safeStart();
     tick = setInterval(updateTimer, 500);
+    keepAwake(true);
     setStatus(SR ? 'Ascult...' : 'Cronometru pornit (fără recunoaștere vocală)', true);
     syncButtons();
   }
@@ -307,7 +367,7 @@ dialog pre { white-space: pre-wrap; background: var(--bg); padding: 12px; border
     state = 'paused';
     recognition?.stop();
     if (mediaRecorder?.state === 'recording') mediaRecorder.pause();
-    clearInterval(tick); updateTimer();
+    clearInterval(tick); updateTimer(); keepAwake(false);
     setStatus('Pauză');
     $('interim').textContent = '';
     syncButtons(); save();
@@ -316,10 +376,8 @@ dialog pre { white-space: pre-wrap; background: var(--bg); padding: 12px; border
     if (state === 'running') elapsedBefore = elapsed();
     state = 'idle';
     recognition?.stop(); recognition = null;
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-    mediaRecorder = null;
-    audioStream?.getTracks().forEach(t => t.stop()); audioStream = null;
-    clearInterval(tick); updateTimer();
+    stopAudio();
+    clearInterval(tick); updateTimer(); keepAwake(false);
     setStatus('Încheiat');
     $('interim').textContent = '';
     syncButtons(); save();
@@ -424,7 +482,22 @@ dialog pre { white-space: pre-wrap; background: var(--bg); padding: 12px; border
       b.className = 'speaker-btn' + (i === meeting.current ? ' active' : '');
       b.innerHTML = `${escapeHtml(name)}${i < 9 ? `<kbd>${i + 1}</kbd>` : ''}`;
       b.title = 'Click: vorbește acum · Dublu-click: redenumește · Click dreapta: șterge';
-      b.onclick = () => setSpeaker(i);
+      b.onclick = () => {
+        if (i !== meeting.current) return setSpeaker(i);
+        // Atingere pe vorbitorul deja selectat → redenumire / ștergere (util pe telefon)
+        const n = prompt(`Redenumește „${name}” (lasă gol pentru a-l elimina):`, name);
+        if (n === null) return;
+        if (!n.trim()) {
+          if (meeting.speakers.length > 1 && confirm(`Elimini participantul „${name}”? (rândurile rămân)`)) {
+            meeting.speakers.splice(i, 1);
+            meeting.current = Math.min(meeting.current, meeting.speakers.length - 1);
+          }
+        } else {
+          meeting.segments.forEach(s => { if (s.speaker === name) s.speaker = n.trim(); });
+          meeting.speakers[i] = n.trim();
+        }
+        renderSpeakers(); renderTranscript(); saveSoon();
+      };
       b.ondblclick = () => {
         const n = prompt('Nume nou:', name);
         if (n && n.trim()) {
@@ -632,6 +705,16 @@ dialog pre { white-space: pre-wrap; background: var(--bg); padding: 12px; border
     if (/^[1-9]$/.test(e.key)) setSpeaker(+e.key - 1);
     if (e.key === ' ' && !e.ctrlKey) { e.preventDefault(); state === 'running' ? pause() : start(); }
   });
+  // iPhone nu declanșează mereu beforeunload: salvăm și la ascundere,
+  // iar la revenirea în aplicație repornim transcrierea dacă s-a oprit.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') save();
+    else if (state === 'running') {
+      keepAwake(true);
+      if (SR && !recActive) safeStart();
+    }
+  });
+  window.addEventListener('pagehide', save);
   window.addEventListener('beforeunload', (e) => {
     save();
     if (state !== 'idle') { e.preventDefault(); e.returnValue = ''; }
@@ -639,6 +722,11 @@ dialog pre { white-space: pre-wrap; background: var(--bg); padding: 12px; border
 
   // ---------- Init ----------
   if (!SR) $('warn').style.display = 'block';
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (isIOS) { $('recordAudio').checked = false; $('iosAudioHint').style.display = 'block'; }
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW', e));
+  }
   renderSpeakers(); renderTranscript(); renderHistory(); syncButtons();
 })();
 </script>
